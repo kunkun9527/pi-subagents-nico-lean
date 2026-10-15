@@ -30,6 +30,7 @@
 本包当作上游的 fork，`npm install` 时由 `postinstall` 打上 `patches/` 里的补丁（已打过则跳过）：
 
 - `pi-subagents-inspect-single-root.patch`：上游 0.78.0 中，运行中的 single 任务只在 `steps[0]` 写 `sessionFile`，根 `sessionFile` 要到结束才写；codexhost 点进子代理时按根查询（`/subagents-inspect-rpc`），于是运行中拿到 0 条消息、一直转圈。补丁让根查询在“single、只有一个 step”时回退读该 step 的记录，并沿用它的 `context` 判断 fork；回复身份不变，chain/parallel 不受影响。测试：`tests/inspect-single-root.test.mjs`（未打补丁时其中 2 项失败）。
+- `pi-subagents-toolcall-arguments.patch`：Pi 会话记录把工具参数存在 `arguments`，上游 `fleet-view.js` 只读 `args`，所以 Codex 面板和 `status` transcript 里只显示 `[tool: bash]`。补丁改为 `args ?? arguments`。测试同上文件。
 
 ## 安装与回滚
 

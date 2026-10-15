@@ -1,5 +1,5 @@
-// Guards patches/pi-subagents-inspect-single-root.patch: root inspection of a running
-// single-mode run must read the sole step's live transcript (codexhost clicks the root).
+// Guards patches/: root inspection of a running single-mode run must read the sole step's
+// live transcript (codexhost clicks the root), and tool calls must show their `arguments`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -27,7 +27,7 @@ function fixture({ mode = "single", steps = 1, context = "fresh", rootSessionFil
     fs.writeFileSync(file, [
       { type: "session", version: 3, id: `s${index}` },
       { type: "message", id: "u", message: { role: "user", content: [{ type: "text", text: `TASK-${index}` }] } },
-      { type: "message", id: "a", message: { role: "assistant", content: [{ type: "toolCall", name: "bash", args: { command: "sleep 90" } }] } },
+      { type: "message", id: "a", message: { role: "assistant", content: [{ type: "toolCall", name: "bash", arguments: { command: "sleep 90" } }] } },
     ].map((entry) => JSON.stringify(entry)).join("\n") + "\n");
     return file;
   };
@@ -59,6 +59,13 @@ test("running single run: root inspection reads the sole step's live transcript,
   assert.equal(reply.messages?.length, 2);
   assert.equal(reply.task, "TASK-0");
   assert.deepEqual(f.inspect("step:0").messages, reply.messages);
+});
+
+test("tool calls show Pi's `arguments` field", (t) => {
+  const f = fixture();
+  t.after(f.cleanup);
+  const call = f.inspect().messages?.find((message) => message.kind === "toolCall");
+  assert.equal(call?.text, '[tool: bash {"command":"sleep 90"}]');
 });
 
 test("running forked single run: transcript shown but inherited first user message is not the task", (t) => {
