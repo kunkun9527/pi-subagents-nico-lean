@@ -1,6 +1,6 @@
 # pi-subagents-nico-lean
 
-本地测试包：把 [pi-subagents](https://github.com/nicobailon/pi-subagents)（nicobailon）在主会话注册的工具收成一个精简的 `subagent` 工具，减少模型初始化上下文。上游运行时、codexhost 状态面板数据（`PI_SUBAGENT_ASYNC_JSON:`）和各工具的 execute 都不改，只对上游打了一个修复补丁（见下文）。暂不发布。
+本地测试包：把 [pi-subagents](https://github.com/nicobailon/pi-subagents)（nicobailon）在主会话注册的工具收成一个精简的 `subagent` 工具，减少模型初始化上下文。上游运行时、codexhost 状态面板数据（`PI_SUBAGENT_ASYNC_JSON:`）和各工具的 execute 都不改，只对上游打了两个修复补丁（见下文）。暂不发布。
 
 ## 效果
 

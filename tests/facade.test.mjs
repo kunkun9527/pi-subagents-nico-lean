@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createJiti } from "jiti";
 
+// These tests model the parent session. Run inside a subagent child, upstream would decide at import
+// time to skip registration; node --test runs each file in its own process, so this stays local.
+delete process.env.PI_SUBAGENT_CHILD;
+
 const jiti = createJiti(import.meta.url, { moduleCache: false });
 const { createSubagentsFacade, routeFacadeCall, default: realFacade } = await jiti.import("../index.ts");
 // Upstream's own lowering of a model call's `options`; not a public export, so import by path.
