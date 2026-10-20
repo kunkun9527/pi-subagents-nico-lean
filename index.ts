@@ -44,6 +44,10 @@ const DROPPED = new Set([LOADER, "contact_supervisor"]);
 // Upstream accepts these only at the top level; the facade keeps them in `options` to stay small.
 const TOP_LEVEL_ONLY = ["workflow", "args", "model", "cwd", "worktree", "output"];
 
+// Claude Code Task-tool spellings with the same meaning upstream: the task text, the agent name and
+// background (true = async). Task's `description` is only a UI label; upstream has no such field.
+const TASK_ALIASES: Record<string, string> = { prompt: "task", subagent_type: "agent", run_in_background: "async" };
+
 const PARAMETERS = Type.Object({
 	agent: Type.Optional(Type.String()),
 	task: Type.Optional(Type.String()),
@@ -61,6 +65,33 @@ const DESCRIPTION = [
 	"Results naming bg_wait or subagent_supervisor mean these actions.",
 	"Delegate only when the user or instructions authorize it; one writer per cwd; on launch failure stop and report.",
 ].join(" ");
+
+/**
+ * Repair common model mistakes before Pi validates the call: `options` sent as a JSON string, and Task-style
+ * aliases. A conflicting target value is never overwritten. `action` is never inferred (stop/resume have effects).
+ */
+export function prepareFacadeArguments(args: unknown): any {
+	if (!args || typeof args !== "object" || Array.isArray(args)) return args;
+	const fields: Record<string, unknown> = { ...(args as Record<string, unknown>) };
+	if (typeof fields.options === "string") {
+		try {
+			const parsed: unknown = JSON.parse(fields.options);
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) fields.options = parsed;
+		} catch {
+			// Leave it for validation to report.
+		}
+	}
+	let aliased = false;
+	for (const [alias, target] of Object.entries(TASK_ALIASES)) {
+		if (fields[alias] === undefined) continue;
+		if (fields[target] === undefined) fields[target] = fields[alias];
+		else if (!isDeepStrictEqual(fields[target], fields[alias])) continue;
+		delete fields[alias];
+		aliased = true;
+	}
+	if (aliased) delete fields.description;
+	return fields;
+}
 
 /** Map one facade call to the upstream tool and the arguments that tool's own schema expects. */
 export function routeFacadeCall(params: FacadeParams): { name: string; args: Record<string, unknown> } {
@@ -105,7 +136,8 @@ export function createSubagentsFacade(upstream: UpstreamExtension = subagents as
 		let facade: CapturedTool | undefined;
 		const route = routeFacadeCall;
 		// Rendering must not throw on arguments execute would reject; fall back to the plain view.
-		const routeForDisplay = (params: FacadeParams): { name: string; args: Record<string, unknown> } => {
+		const routeForDisplay = (raw: FacadeParams): { name: string; args: Record<string, unknown> } => {
+			const params = prepareFacadeArguments(raw) as FacadeParams;
 			try {
 				return route(params);
 			} catch {
@@ -119,6 +151,7 @@ export function createSubagentsFacade(upstream: UpstreamExtension = subagents as
 			...(main.exposure ? { exposure: main.exposure } : {}),
 			description: DESCRIPTION,
 			parameters: PARAMETERS,
+			prepareArguments: prepareFacadeArguments,
 			async execute(callId, params, signal, onUpdate, ctx) {
 				const { name, args } = route(params as FacadeParams);
 				const target = captured.get(name);

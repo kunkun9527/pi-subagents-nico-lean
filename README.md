@@ -20,6 +20,7 @@
 | `{action: "supervisor.pending\|reply\|status\|list", id?, message?}` | `subagent_supervisor`，`id` 作为 `replyTo` |
 
 - 转发前按目标工具自己的 schema 校验并转换参数，和直接调用上游一致。
+- 模型常见的传参错误会在校验前自动修正：`options` 传成 JSON 字符串时解析为对象；Claude Code Task 写法 `prompt`→`task`、`subagent_type`→`agent`、`run_in_background`→`async`（目标字段已有不同值时不覆盖），随之带的 `description`（仅 UI 标签，上游无对应字段）丢弃。`action` 不会被推断。
 - 上游结果里提到的 `bg_wait`、`subagent_supervisor`，在工具说明里指明对应 `action: "wait"`、`action: "supervisor.*"`。
 - `subagents_enable`（按需加载器）不注册，`subagent` 始终可用；旧会话只声明过加载器时，`session_start`/`session_tree` 会补激活 `subagent`。
 - 主会话的 `contact_supervisor` 只会报错（上游 `TOP_LEVEL_SUPERVISOR_REFUSAL`），不注册。子代理在上游自己的进程/会话里运行，不经过本包；agent 文件应显式列出 `extensions`，不要让子代理加载本包。

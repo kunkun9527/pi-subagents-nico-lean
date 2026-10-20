@@ -121,6 +121,72 @@ test("routed arguments are checked against the target tool's own schema", async 
   assert.equal(calls.length, before, "invalid arguments never reach upstream");
 });
 
+test("prepareArguments decodes a JSON-string options and maps only equivalent Task aliases", async () => {
+  const { tools, calls, run } = setup();
+  const facade = tools.get("subagent");
+  const upstreamTool = { name: "subagent", parameters: createSubagentParamsSchema() };
+  const check = (tool, args) => validateToolArguments(tool, { type: "toolCall", id: "c", name: tool.name, arguments: args });
+  const same = (raw) => { const prepared = facade.prepareArguments(raw); assert.equal(prepared.constructor, Object); return prepared; };
+
+  // options as a JSON string: invalid for the facade shell before, valid and hoistable after.
+  const stringOptions = { agent: "General", task: "t", options: '{"timeoutMs":5,"model":"a/b"}' };
+  assert.throws(() => check(facade, stringOptions), /Validation failed/);
+  const decoded = facade.prepareArguments(stringOptions);
+  assert.equal(typeof stringOptions.options, "string", "input is not mutated");
+  assert.deepEqual(decoded, { agent: "General", task: "t", options: { timeoutMs: 5, model: "a/b" } });
+  assert.deepEqual(facade.prepareArguments(decoded), decoded, "idempotent");
+  const { args } = routeFacadeCall(check(facade, decoded));
+  assert.deepEqual(args, { agent: "General", task: "t", model: "a/b", options: { timeoutMs: 5 } });
+  check(upstreamTool, args);
+  for (const bad of ["not json", "[1]", "5", '"x"', ""]) {
+    const kept = { agent: "A", task: "t", options: bad };
+    assert.deepEqual(same(kept), kept, "undecodable options stay for validation");
+    assert.throws(() => check(facade, same(kept)), /Validation failed/);
+  }
+
+  // Task-tool aliases map onto upstream's own fields and then run through upstream's schema.
+  const task = { prompt: "do it", subagent_type: "General", description: "short label", run_in_background: false };
+  const mapped = facade.prepareArguments(task);
+  assert.deepEqual(mapped, { task: "do it", agent: "General", async: false });
+  assert.deepEqual(task, { prompt: "do it", subagent_type: "General", description: "short label", run_in_background: false });
+  assert.deepEqual(check(upstreamTool, routeFacadeCall(check(facade, mapped)).args), mapped);
+  await run(mapped);
+  assert.deepEqual(calls.at(-1), { name: "subagent", params: { task: "do it", agent: "General", async: false } });
+  assert.deepEqual(facade.prepareArguments({ prompt: "x", agent: "G", run_in_background: true }), { task: "x", agent: "G", async: true });
+  assert.deepEqual(facade.prepareArguments(mapped), mapped, "idempotent");
+  assert.deepEqual(facade.prepareArguments({ prompt: "t", task: "t" }), { task: "t" }, "equal duplicate collapses");
+
+  // A different value already in the target is never overwritten; the alias stays and nothing is guessed.
+  const conflict = { agent: "A", task: "real", prompt: "other", subagent_type: "B", async: true, run_in_background: false };
+  assert.deepEqual(facade.prepareArguments(conflict), conflict);
+
+  // description alone is not a Task call and is left untouched; action is never inferred.
+  for (const raw of [{ description: "label" }, { id: "abc" }, { message: "hi", id: "abc" }, { prompt: "only" }]) {
+    assert.equal("action" in facade.prepareArguments(raw), false);
+  }
+  assert.deepEqual(facade.prepareArguments({ agent: "A", task: "t", description: "label" }), { agent: "A", task: "t", description: "label" });
+  const explicit = { action: "stop", id: "abc", prompt: "p" };
+  assert.deepEqual(facade.prepareArguments(explicit), { action: "stop", id: "abc", task: "p" });
+  for (const odd of [null, undefined, "x", [1]]) assert.equal(facade.prepareArguments(odd), odd);
+});
+
+test("rendering uses the same repaired arguments", () => {
+  const calls = [];
+  const { pi, tools } = createMockPi();
+  createSubagentsFacade((api) => api.registerTool({
+    ...fakeTool("subagent", calls),
+    renderCall: (args, _theme, context) => ({ args, contextArgs: context.args }),
+    renderResult: (_result, _options, _theme, context) => ({ args: context.args }),
+  }))(pi);
+  const facade = tools.get("subagent");
+  const raw = { prompt: "do it", subagent_type: "General", options: '{"timeoutMs":5,"model":"a/b"}' };
+  const expected = { task: "do it", agent: "General", model: "a/b", options: { timeoutMs: 5 } };
+  const call = facade.renderCall(raw, { fg: (_c, text) => text }, { args: raw });
+  assert.deepEqual(call.args, expected);
+  assert.deepEqual(call.contextArgs, expected);
+  assert.deepEqual(facade.renderResult({ content: [] }, {}, { fg: (_c, text) => text }, { args: raw }).args, expected);
+});
+
 test("a resumed transcript that declared only upstream's loader gets subagent back", () => {
   const ctx = (toolsAdded) => ({ sessionManager: { buildSessionContext: () => ({ messages: [{ role: "system", content: "", toolsAdded }] }) } });
   const legacy = setup();
