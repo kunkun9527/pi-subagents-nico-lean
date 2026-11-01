@@ -1,53 +1,110 @@
 # pi-subagents-nico-lean
 
-把 [pi-subagents](https://github.com/nicobailon/pi-subagents)（nicobailon）在主会话注册的工具收成一个精简的 `subagent` 工具，减少模型初始化上下文。上游运行时、codexhost 状态面板数据（`PI_SUBAGENT_ASYNC_JSON:`）和各工具的 execute 都不改，也不给上游打补丁。配合 [kunkun9527/codex-host](https://github.com/kunkun9527/codex-host) 的 `pi-local-0.16.0` 分支使用时，codexhost 里能看到子代理卡片和实时记录。
+> **Token benchmark: Lean 238, upstream `pi-subagents@0.82.1` 1,322 — 82.0% fewer.**
+> Works with the [codexhost Pi fork](https://github.com/kunkun9527/codex-host/tree/pi-local-0.16.0) to show subagent cards and live transcripts in Codex Desktop.
 
-## 效果
+[简体中文](https://github.com/kunkun9527/pi-subagents-nico-lean/blob/master/README_zh-CN.md)
 
-| | 工具 | 初始 token（`ceil(字符/4)`，Pi 1.4.0 隔离环境实测） |
-|---|---|---|
-| 上游 `pi-subagents@0.82.1` | `subagent`、`bg_wait`、`subagent_supervisor`、`contact_supervisor` | 1,322 |
-| 本包 | `subagent` | 238 |
+A lightweight Pi wrapper for [`pi-subagents`](https://github.com/nicobailon/pi-subagents) (nicobailon). It keeps the upstream runtime, the codexhost status data (`PI_SUBAGENT_ASYNC_JSON:`), and every tool's `execute` unchanged, and folds the parent-session tools into one compact `subagent` tool. No patches are applied to upstream.
 
-## 用法
+## Context Footprint Benchmark
 
-参数：`agent`、`task`、`action`、`id`、`message`、`async`、`options`（其余上游字段，如 workflow、args、model、cwd、timeoutMs）。
+With only this extension enabled, its recurring model-facing initialization contribution is:
 
-| 调用 | 转给上游 |
-|---|---|
-| `{agent, task}`、`{action, id?, ...}` | `subagent`；`options` 里的 workflow、args、model、cwd、worktree、output 提到顶层（上游只接受顶层，两处值不同时报错） |
-| `{action: "wait", id?, options?}` | `bg_wait`（options：all、nonBlocking、timeoutMs、stopOnAttention） |
-| `{action: "supervisor.pending\|reply\|status\|list", id?, message?}` | `subagent_supervisor`，`id` 作为 `replyTo` |
+| Variant | Tools | Total |
+| --- | --- | ---: |
+| Lean `pi-subagents-nico-lean@0.82.1` | `subagent` | **238** |
+| Upstream `pi-subagents@0.82.1` | `subagent` + `bg_wait` + `subagent_supervisor` + `contact_supervisor` | **1,322** |
 
-- 转发前按目标工具自己的 schema 校验并转换参数，和直接调用上游一致。
-- 模型常见的传参错误会在校验前自动修正：`options` 传成 JSON 字符串时解析为对象；Claude Code Task 写法 `prompt`→`task`、`subagent_type`→`agent`、`run_in_background`→`async`（目标字段已有不同值时不覆盖），随之带的 `description`（仅 UI 标签，上游无对应字段）丢弃。`action` 不会被推断。
-- 上游结果里提到的 `bg_wait`、`subagent_supervisor`，在工具说明里指明对应 `action: "wait"`、`action: "supervisor.*"`。
-- `subagents_enable`（按需加载器）不注册，`subagent` 始终可用；旧会话只声明过加载器时，`session_start`/`session_tree` 会补激活 `subagent`。
-- 主会话的 `contact_supervisor` 只会报错（上游 `TOP_LEVEL_SUPERVISOR_REFUSAL`），不注册。子代理在上游自己的进程/会话里运行，不经过本包；agent 文件应显式列出 `extensions`，不要让子代理加载本包。
-- 保留上游 `exposure: "model-only"`，所以 codemode 里调不到 `subagent`。
+This saves **1,084 tokens (82.0%)**.
+Measured with Pi 1.4.0 in an isolated environment. Tokens are a fixed character-proxy estimate using `ceil(characters / 4)`, not provider tokenizer billing.
 
-## 上游已知问题
+## Core Features
 
-0.79.1 及以前本包用 `postinstall` 给上游打过两个补丁；0.82.1 起上游运行 `bundle/`，补丁已删除：
+* Full upstream runtime: agent discovery, single/chain/parallel runs, background execution, status, steering, and supervisor replies all go through upstream unchanged.
+* Unified tool interface: `subagent`, `bg_wait`, and `subagent_supervisor` are routed through one `subagent` tool.
+* Same validation as upstream: each call is checked against the target tool's own schema before it is forwarded.
+* Forgiving arguments: common model mistakes are repaired before validation (see [Usage](#usage)).
 
-- 运行中的 single 任务只在 `steps[0]` 写 `sessionFile`，根 `sessionFile` 结束时才写（上游 `docs/observability.md` 的约定），按根查询 `/subagents-inspect-rpc` 拿不到记录。改由 codexhost 兼容：根查询没有消息、且父会话的启动结果是 `mode: "single"` 时，改按 `step:0` 再查一次（`codex-host-pi-local` 的 `pi-adapter.ts`）。
-- Pi 会话记录把工具参数存在 `arguments`，上游 transcript 解析只读 `args`，所以 codexhost 面板和 `status` transcript 里工具调用只显示 `[tool: bash]`，不带参数（0.82.1 仍在，`bundle/chunk-FXUXCX2K.js` 的 `sessionMessageParts`）。暂未处理；工具结果照常显示。
-
-## 安装与回滚
+## Installation
 
 ```bash
 pi install git:github.com/kunkun9527/pi-subagents-nico-lean@v0.82.1
 ```
 
-Pi 会克隆仓库并执行 `npm install --omit=dev --legacy-peer-deps`，只装 `pi-subagents@0.82.1`，不会再装一份 Pi。本包已包含上游运行时，不要再同时加载 `npm:pi-subagents`。装好后 `/reload` 或新开会话。
+Pi clones the repository and runs `npm install --omit=dev --legacy-peer-deps`, which installs only `pi-subagents@0.82.1` and no second copy of Pi. This package already contains the upstream runtime, so do not also load `npm:pi-subagents` or another `pi-subagents` wrapper. Run `/reload` or start a new session afterwards.
 
-回滚：`pi remove git:github.com/kunkun9527/pi-subagents-nico-lean`。
-
-本地开发时也可以把仓库放进 `~/.pi/agent/local-packages/`，在 `~/.pi/agent/settings.json` 的 `packages` 里写 `"local-packages\\pi-subagents-nico-lean"`。
-
-## 开发
+To uninstall:
 
 ```bash
-npm install
+pi remove git:github.com/kunkun9527/pi-subagents-nico-lean
+```
+
+This package is distributed through GitHub only and is not published to npm.
+
+## Usage
+
+The model sees a single tool:
+
+```text
+subagent
+```
+
+Parameters: `agent`, `task`, `action`, `id`, `message`, `async`, and `options` (other upstream fields such as `workflow`, `args`, `model`, `cwd`, `timeoutMs`).
+
+| Call | Forwarded to upstream |
+| --- | --- |
+| `{agent, task}`, `{action, id?, ...}` | `subagent`; `workflow`, `args`, `model`, `cwd`, `worktree`, and `output` inside `options` are moved to the top level (upstream accepts them only there; conflicting values are rejected) |
+| `{action: "wait", id?, options?}` | `bg_wait` (options: `all`, `nonBlocking`, `timeoutMs`, `stopOnAttention`) |
+| `{action: "supervisor.pending\|reply\|status\|list", id?, message?}` | `subagent_supervisor`, with `id` used as `replyTo` |
+
+```json
+{
+  "agent": "scout",
+  "task": "Find the implementation of the cache key.",
+  "async": true
+}
+```
+
+* `options` passed as a JSON string is parsed into an object.
+* Claude Code Task-style fields are mapped: `prompt` → `task`, `subagent_type` → `agent`, `run_in_background` → `async` (an existing different value is never overwritten). The accompanying `description` is a UI label with no upstream equivalent and is dropped. `action` is never inferred.
+* Where upstream results mention `bg_wait` or `subagent_supervisor`, the tool description points to `action: "wait"` and `action: "supervisor.*"`.
+* The on-demand loader `subagents_enable` is not registered; `subagent` is always available. Sessions that only declared the loader get `subagent` re-activated on `session_start`/`session_tree`.
+* `contact_supervisor` only errors in the parent session (upstream `TOP_LEVEL_SUPERVISOR_REFUSAL`), so it is not registered. Subagents run in upstream's own processes and sessions without this package; agent files should list `extensions` explicitly so children do not load it.
+* Upstream's `exposure: "model-only"` is kept, so `subagent` cannot be called from `codemode`.
+
+## Important: Review Your Agent Definitions
+
+Upstream discovers built-in agents (`scout`, `worker`, `reviewer`, `researcher`, `oracle`, `delegate`, and others) plus custom agents from your Pi directories. This repository does not package any private agents, sessions, or memory.
+
+After installation:
+
+1. Make sure each agent's `model` points to a model available in your environment.
+2. Remove or disable agent types you do not need (for example `subagents.disableBuiltins` in `~/.pi/agent/settings.json`).
+3. Adjust prompts, tools, and extension allowlists to match your workflow.
+
+See the [pi-subagents docs](https://github.com/nicobailon/pi-subagents) for agent file locations and settings.
+
+## Known Upstream Issues
+
+Up to 0.79.1 this package patched upstream in `postinstall`. Since 0.82.1 upstream runs from `bundle/`, and the patches were removed:
+
+* A running single task writes `sessionFile` only to `steps[0]`; the root `sessionFile` is written at the end (upstream `docs/observability.md`), so a root query to `/subagents-inspect-rpc` returns no transcript. The codexhost Pi fork handles this: when the root query is empty and the launch result is `mode: "single"`, it retries with `step:0`.
+* Pi session logs store tool arguments in `arguments`, while upstream transcript parsing reads only `args`, so tool calls show as `[tool: bash]` without arguments in codexhost and `status` transcripts (still present in 0.82.1, `sessionMessageParts`). Not handled yet; tool results display normally.
+
+## Versions
+
+Upstream runtime is pinned to `pi-subagents@0.82.1`, which requires Pi 1.2.0 or newer. Tested with Pi 1.4.0.
+
+## Development
+
+```bash
+npm ci
 npm run check   # tsc + node --test
 ```
+
+For local development, put the repository in `~/.pi/agent/local-packages/` and list `"local-packages\\pi-subagents-nico-lean"` under `packages` in `~/.pi/agent/settings.json`.
+
+## License
+
+MIT. This project wraps the MIT-licensed [`pi-subagents`](https://github.com/nicobailon/pi-subagents).
