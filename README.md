@@ -1,6 +1,6 @@
 # pi-subagents-nico-lean
 
-> **Token benchmark: Lean 238, upstream `pi-subagents@0.82.1` 1,322 — 82.0% fewer.**
+> **Token benchmark: Lean 238, upstream `pi-subagents@0.84.0` 1,322 — 82.0% fewer.**
 > Works with the [codexhost Pi fork](https://github.com/kunkun9527/codex-host/tree/pi-local-0.16.0) to show subagent cards and live transcripts in Codex Desktop.
 
 [简体中文](https://github.com/kunkun9527/pi-subagents-nico-lean/blob/master/README_zh-CN.md)
@@ -13,8 +13,8 @@ With only this extension enabled, its recurring model-facing initialization cont
 
 | Variant | Tools | Total |
 | --- | --- | ---: |
-| Lean `pi-subagents-nico-lean@0.82.1` | `subagent` | **238** |
-| Upstream `pi-subagents@0.82.1` | `subagent` + `bg_wait` + `subagent_supervisor` + `contact_supervisor` | **1,322** |
+| Lean `pi-subagents-nico-lean@0.84.0` | `subagent` | **238** |
+| Upstream `pi-subagents@0.84.0` | `subagent` + `bg_wait` + `subagent_supervisor` + `contact_supervisor` | **1,322** |
 
 This saves **1,084 tokens (82.0%)**.
 Measured with Pi 1.4.0 in an isolated environment. Tokens are a fixed character-proxy estimate using `ceil(characters / 4)`, not provider tokenizer billing.
@@ -29,10 +29,10 @@ Measured with Pi 1.4.0 in an isolated environment. Tokens are a fixed character-
 ## Installation
 
 ```bash
-pi install git:github.com/kunkun9527/pi-subagents-nico-lean@v0.82.1
+pi install git:github.com/kunkun9527/pi-subagents-nico-lean@v0.84.0
 ```
 
-Pi clones the repository and runs `npm install --omit=dev --legacy-peer-deps`, which installs only `pi-subagents@0.82.1` and no second copy of Pi. This package already contains the upstream runtime, so do not also load `npm:pi-subagents` or another `pi-subagents` wrapper. Run `/reload` or start a new session afterwards.
+Pi clones the repository and runs `npm install --omit=dev --legacy-peer-deps`, which installs only `pi-subagents@0.84.0` and no second copy of Pi. This package already contains the upstream runtime, so do not also load `npm:pi-subagents` or another `pi-subagents` wrapper. Run `/reload` or start a new session afterwards.
 
 To uninstall:
 
@@ -90,11 +90,11 @@ See the [pi-subagents docs](https://github.com/nicobailon/pi-subagents) for agen
 Up to 0.79.1 this package patched upstream in `postinstall`. Since 0.82.1 upstream runs from `bundle/`, and the patches were removed:
 
 * A running single task writes `sessionFile` only to `steps[0]`; the root `sessionFile` is written at the end (upstream `docs/observability.md`), so a root query to `/subagents-inspect-rpc` returns no transcript. The codexhost Pi fork handles this: when the root query is empty and the launch result is `mode: "single"`, it retries with `step:0`.
-* Pi session logs store tool arguments in `arguments`, while upstream transcript parsing reads only `args`, so tool calls show as `[tool: bash]` without arguments in codexhost and `status` transcripts (still present in 0.82.1, `sessionMessageParts`). Not handled yet; tool results display normally.
+* Tool calls in codexhost and `status` transcripts showed only `[tool: bash]` without arguments, because upstream read `args` while Pi session logs store `arguments`. Fixed upstream in 0.83.0 (#3053).
 
 ## Versions
 
-Upstream runtime is pinned to `pi-subagents@0.82.1`, which requires Pi 1.2.0 or newer. Tested with Pi 1.4.0.
+Upstream runtime is pinned to `pi-subagents@0.84.0`, which requires Pi 1.2.0 or newer. Tested with Pi 1.4.0.
 
 ## Development
 

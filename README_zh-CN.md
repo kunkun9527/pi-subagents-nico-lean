@@ -1,6 +1,6 @@
 # pi-subagents-nico-lean
 
-> **Token 基准：Lean 238，上游 `pi-subagents@0.82.1` 1,322，减少 82.0%。**
+> **Token 基准：Lean 238，上游 `pi-subagents@0.84.0` 1,322，减少 82.0%。**
 > 配合 [codexhost Pi fork](https://github.com/kunkun9527/codex-host/tree/pi-local-0.16.0) 使用，可在 Codex Desktop 里看到子代理卡片和实时记录。
 
 [English](README.md)
@@ -13,8 +13,8 @@
 
 | 版本 | 工具 | 合计 |
 | --- | --- | ---: |
-| Lean `pi-subagents-nico-lean@0.82.1` | `subagent` | **238** |
-| 上游 `pi-subagents@0.82.1` | `subagent` + `bg_wait` + `subagent_supervisor` + `contact_supervisor` | **1,322** |
+| Lean `pi-subagents-nico-lean@0.84.0` | `subagent` | **238** |
+| 上游 `pi-subagents@0.84.0` | `subagent` + `bg_wait` + `subagent_supervisor` + `contact_supervisor` | **1,322** |
 
 节省 **1,084 tokens（82.0%）**。
 测量环境为 Pi 1.4.0 隔离环境。Token 是按 `ceil(字符数 / 4)` 计算的固定字符代理估算，并非模型 tokenizer 实际计费值。
@@ -29,10 +29,10 @@
 ## 安装
 
 ```bash
-pi install git:github.com/kunkun9527/pi-subagents-nico-lean@v0.82.1
+pi install git:github.com/kunkun9527/pi-subagents-nico-lean@v0.84.0
 ```
 
-Pi 会克隆仓库并执行 `npm install --omit=dev --legacy-peer-deps`，只装 `pi-subagents@0.82.1`，不会再装一份 Pi。本包已包含上游运行时，不要再同时加载 `npm:pi-subagents` 或其它 `pi-subagents` 包装扩展。装好后 `/reload` 或新开会话。
+Pi 会克隆仓库并执行 `npm install --omit=dev --legacy-peer-deps`，只装 `pi-subagents@0.84.0`，不会再装一份 Pi。本包已包含上游运行时，不要再同时加载 `npm:pi-subagents` 或其它 `pi-subagents` 包装扩展。装好后 `/reload` 或新开会话。
 
 卸载：
 
@@ -90,11 +90,11 @@ Agent 文件位置和设置见 [pi-subagents 文档](https://github.com/nicobail
 0.79.1 及以前本包用 `postinstall` 给上游打过两个补丁；0.82.1 起上游运行 `bundle/`，补丁已删除：
 
 * 运行中的 single 任务只在 `steps[0]` 写 `sessionFile`，根 `sessionFile` 结束时才写（上游 `docs/observability.md` 的约定），按根查询 `/subagents-inspect-rpc` 拿不到记录。codexhost Pi fork 已兼容：根查询没有消息、且启动结果是 `mode: "single"` 时，改按 `step:0` 再查一次。
-* Pi 会话记录把工具参数存在 `arguments`，上游 transcript 解析只读 `args`，所以 codexhost 面板和 `status` transcript 里工具调用只显示 `[tool: bash]`，不带参数（0.82.1 仍在，`sessionMessageParts`）。暂未处理；工具结果照常显示。
+* codexhost 面板和 `status` transcript 里工具调用曾只显示 `[tool: bash]`、不带参数，因为上游只读 `args`，而 Pi 会话记录把参数存在 `arguments`。上游 0.83.0 已修复（#3053）。
 
 ## 版本
 
-上游运行时固定为 `pi-subagents@0.82.1`，需要 Pi 1.2.0 或更新版本。已在 Pi 1.4.0 上测试。
+上游运行时固定为 `pi-subagents@0.84.0`，需要 Pi 1.2.0 或更新版本。已在 Pi 1.4.0 上测试。
 
 ## 开发
 
