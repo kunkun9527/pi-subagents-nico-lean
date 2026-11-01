@@ -1,9 +1,9 @@
 {
   "name": "@ssk_dev/pi-subagents-nico-lean",
-  "version": "0.79.1",
+  "version": "0.82.1",
   "private": true,
   "type": "module",
-  "description": "Lean single-tool facade over pi-subagents (nicobailon), local testing only.",
+  "description": "Lean single-tool facade over pi-subagents (nicobailon).",
   "license": "MIT",
   "files": [
     "index.ts",
@@ -14,13 +14,12 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "postinstall": "(git apply -R --check patches/pi-subagents-inspect-single-root.patch || git apply patches/pi-subagents-inspect-single-root.patch) && (git apply -R --check patches/pi-subagents-toolcall-arguments.patch || git apply patches/pi-subagents-toolcall-arguments.patch)",
     "test": "node --test tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json",
     "check": "npm run typecheck && npm test"
   },
   "dependencies": {
-    "pi-subagents": "0.79.1"
+    "pi-subagents": "0.82.1"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": ">=1.1.0",

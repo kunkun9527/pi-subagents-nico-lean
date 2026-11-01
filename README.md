@@ -1,12 +1,12 @@
 # pi-subagents-nico-lean
 
-本地测试包：把 [pi-subagents](https://github.com/nicobailon/pi-subagents)（nicobailon）在主会话注册的工具收成一个精简的 `subagent` 工具，减少模型初始化上下文。上游运行时、codexhost 状态面板数据（`PI_SUBAGENT_ASYNC_JSON:`）和各工具的 execute 都不改，只对上游打了两个修复补丁（见下文）。暂不发布。
+把 [pi-subagents](https://github.com/nicobailon/pi-subagents)（nicobailon）在主会话注册的工具收成一个精简的 `subagent` 工具，减少模型初始化上下文。上游运行时、codexhost 状态面板数据（`PI_SUBAGENT_ASYNC_JSON:`）和各工具的 execute 都不改，也不给上游打补丁。配合 [kunkun9527/codex-host](https://github.com/kunkun9527/codex-host) 的 `pi-local-0.16.0` 分支使用时，codexhost 里能看到子代理卡片和实时记录。
 
 ## 效果
 
-| | 工具 | 初始 token（`ceil(字符/4)`，隔离环境实测） |
+| | 工具 | 初始 token（`ceil(字符/4)`，Pi 1.4.0 隔离环境实测） |
 |---|---|---|
-| 上游 `pi-subagents@0.78.0` | `subagent`、`bg_wait`、`subagent_supervisor`、`contact_supervisor` | 1,317 |
+| 上游 `pi-subagents@0.82.1` | `subagent`、`bg_wait`、`subagent_supervisor`、`contact_supervisor` | 1,322 |
 | 本包 | `subagent` | 238 |
 
 ## 用法
@@ -26,16 +26,24 @@
 - 主会话的 `contact_supervisor` 只会报错（上游 `TOP_LEVEL_SUPERVISOR_REFUSAL`），不注册。子代理在上游自己的进程/会话里运行，不经过本包；agent 文件应显式列出 `extensions`，不要让子代理加载本包。
 - 保留上游 `exposure: "model-only"`，所以 codemode 里调不到 `subagent`。
 
-## 对上游的补丁
+## 上游已知问题
 
-本包当作上游的 fork，`npm install` 时由 `postinstall` 打上 `patches/` 里的补丁（已打过则跳过）：
+0.79.1 及以前本包用 `postinstall` 给上游打过两个补丁；0.82.1 起上游运行 `bundle/`，补丁已删除：
 
-- `pi-subagents-inspect-single-root.patch`：上游 0.78.0 中，运行中的 single 任务只在 `steps[0]` 写 `sessionFile`，根 `sessionFile` 要到结束才写；codexhost 点进子代理时按根查询（`/subagents-inspect-rpc`），于是运行中拿到 0 条消息、一直转圈。补丁让根查询在“single、只有一个 step”时回退读该 step 的记录，并沿用它的 `context` 判断 fork；回复身份不变，chain/parallel 不受影响。测试：`tests/inspect-single-root.test.mjs`（未打补丁时其中 2 项失败）。
-- `pi-subagents-toolcall-arguments.patch`：Pi 会话记录把工具参数存在 `arguments`，上游 `fleet-view.js` 只读 `args`，所以 Codex 面板和 `status` transcript 里只显示 `[tool: bash]`。补丁改为 `args ?? arguments`。测试同上文件。
+- 运行中的 single 任务只在 `steps[0]` 写 `sessionFile`，根 `sessionFile` 结束时才写（上游 `docs/observability.md` 的约定），按根查询 `/subagents-inspect-rpc` 拿不到记录。改由 codexhost 兼容：根查询没有消息、且父会话的启动结果是 `mode: "single"` 时，改按 `step:0` 再查一次（`codex-host-pi-local` 的 `pi-adapter.ts`）。
+- Pi 会话记录把工具参数存在 `arguments`，上游 transcript 解析只读 `args`，所以 codexhost 面板和 `status` transcript 里工具调用只显示 `[tool: bash]`，不带参数（0.82.1 仍在，`bundle/chunk-FXUXCX2K.js` 的 `sessionMessageParts`）。暂未处理；工具结果照常显示。
 
 ## 安装与回滚
 
-`~/.pi/agent/settings.json` 的 `packages` 用 `"local-packages\\pi-subagents-nico-lean"` 替换 `"npm:pi-subagents"`，然后 `/reload` 或新开会话。回滚时换回去即可。
+```bash
+pi install git:github.com/kunkun9527/pi-subagents-nico-lean@v0.82.1
+```
+
+Pi 会克隆仓库并执行 `npm install --omit=dev --legacy-peer-deps`，只装 `pi-subagents@0.82.1`，不会再装一份 Pi。本包已包含上游运行时，不要再同时加载 `npm:pi-subagents`。装好后 `/reload` 或新开会话。
+
+回滚：`pi remove git:github.com/kunkun9527/pi-subagents-nico-lean`。
+
+本地开发时也可以把仓库放进 `~/.pi/agent/local-packages/`，在 `~/.pi/agent/settings.json` 的 `packages` 里写 `"local-packages\\pi-subagents-nico-lean"`。
 
 ## 开发
 
